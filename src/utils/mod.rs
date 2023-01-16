@@ -1,6 +1,7 @@
 use std::fmt::Error;
 
-mod serializer;
+pub mod serializer;
+pub mod sleddb;
 
 pub use serializer::*;
 

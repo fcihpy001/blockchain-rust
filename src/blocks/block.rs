@@ -1,17 +1,17 @@
-use std::ptr::hash;
+
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
 
 use crate::blocks::pow::ProofOfWork;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq,Default)]
 pub struct Block {
     header: BlockHeader,
     data: String,
     hash: String
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone,Default)]
 pub struct BlockHeader {
     timestamp: i64,
     prev_hash: String,
