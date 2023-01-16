@@ -1,14 +1,9 @@
-use std::path::Path;
-use anyhow::Error;
+use std::{path::Path, collections::HashMap};
 use sled::{Db, IVec, transaction::TransactionResult};
+
+use crate::{Storage, error::BlockchainError, Block, utils::{deserialize, serialize}, TIP_KEY, TABLE_OF_BLOCK, HEIGHT, StorageIterator, UTXO_SET, Txoutput};
 use crate::blocks::block::Block;
-use crate::utils::{deserialize, serialize};
-
-use crate::error::BlockchainError;
-
-pub const TIP_KEY: &str = "tip_hash";
-pub const HEIGHT: &str = "height";
-pub const TABLE_OF_BLOCK: &str = "blocks";
+use crate::utils::{HEIGHT, Storage, StorageIterator, TABLE_OF_BLOCK, TIP_KEY, UTXO_SET};
 
 pub struct SledDb {
     db: Db
@@ -59,6 +54,34 @@ impl Storage for SledDb {
         let iter = StorageIterator::new(self.db.scan_prefix(prefix));
         Ok(Box::new(iter))
     }
+
+    fn get_utxo_set(&self) -> HashMap<String, Vec<crate::Txoutput>> {
+        let mut map = HashMap::new();
+
+        let prefix = format!("{}:", UTXO_SET);
+
+        for item in self.db.scan_prefix(prefix) {
+            let (k, v) = item.unwrap();
+            let txid = String::from_utf8(k.to_vec()).unwrap();
+            let txid = txid.split(":").collect::<Vec<_>>()[1].into();
+            let outputs = deserialize::<Vec<Txoutput>>(&v.to_vec()).unwrap();
+
+            map.insert(txid, outputs);
+        }
+
+        map
+    }
+
+    fn write_utxo(&self, txid: &str, outs: Vec<crate::Txoutput>) -> Result<(), BlockchainError> {
+        let name = format!("{}:{}", UTXO_SET, txid);
+        self.db.insert(name, serialize(&outs)?)?;
+        Ok(())
+    }
+
+    fn clear_utxo_set(&self) {
+        let prefix = format!("{}:", UTXO_SET);
+        self.db.remove(prefix).unwrap();
+    }
 }
 
 impl From<IVec> for Block {
@@ -66,48 +89,19 @@ impl From<IVec> for Block {
         let result = deserialize::<Block>(&v.to_vec());
         match result {
             Ok(block) => block,
-            Err(_) => Block::default()
+            Err(_) => Block::default(),
         }
     }
 }
 
 impl From<Result<(IVec, IVec), sled::Error>> for Block {
-    fn from(result: Result<(IVec, IVec), Error>) -> Self {
+    fn from(result: Result<(IVec, IVec), sled::Error>) -> Self {
         match result {
             Ok((_, v)) => match deserialize::<Block>(&v.to_vec()) {
                 Ok(block) => block,
-                Err(_) => Block::default()
+                Err(_) => Block::default(),
             },
-            Err(_) => Block::default()
+            Err(_) => Block::default(),
         }
-    }
-}
-
-pub trait Storage: Send + Sync + 'static {
-    fn get_tip(&self) -> Result<Option<String>, BlockchainError>;
-    fn get_block(&self, key: &str) -> Result<Option<Block>, BlockchainError>;
-    fn get_height(&self) -> Result<Option<usize>, BlockchainError>;
-    fn update_blocks(&self, key: &str, block: &Block, height: usize);
-    fn get_block_iter(&self) -> Result<Box<dyn Iterator<Item = Block>>, BlockchainError>;
-}
-pub struct StorageIterator<T> {
-    data: T
-}
-
-impl<T> StorageIterator<T> {
-    pub fn new(data: T) -> Self {
-        Self { data }
-    }
-}
-
-impl<T> Iterator for StorageIterator<T>
-    where
-        T: Iterator,
-        T::Item: Into<Block>
-{
-    type Item = Block;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.data.next().map(|v| v.into())
     }
 }

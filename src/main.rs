@@ -1,8 +1,12 @@
+extern crate core;
+
 use crate::blocks::blockchain::Blockchain;
 
 pub mod blocks;
 pub mod utils;
 pub mod error;
+pub mod transactions;
+
 
 fn main() {
     println!("Hello, world!");

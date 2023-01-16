@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::ops::Shl;
 use bigint::U256;
-
+use anyhow::Result;
 use crate::blocks::block::Block;
 use utils::{serialize, hash_to_u8, hash_to_str};
 
