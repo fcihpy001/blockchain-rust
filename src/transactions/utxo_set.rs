@@ -24,10 +24,7 @@ impl<T: Storage> UTXOSet<T> {
         Ok(())
     }
 
-    pub fn find_sendable_outputs(
-        &self,
-        from_addr: &str,
-        amount: i32) -> (i32, HashMap<String,Vec<usize> >) {
+    pub fn find_spendable_outputs(&self, public_key_hash: &[u8], amount: i32) -> (i32, HashMap<String, Vec<usize>>) {
         let mut unspent_outputs = HashMap::new();
         let mut accumulated = 0;
         let utxo_set = self.storage.get_utxo_set();

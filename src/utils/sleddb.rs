@@ -1,8 +1,9 @@
 use std::{path::Path, collections::HashMap};
 use sled::{Db, IVec, transaction::TransactionResult};
 
-use crate::{Storage, error::BlockchainError, Block, utils::{deserialize, serialize}, TIP_KEY, TABLE_OF_BLOCK, HEIGHT, StorageIterator, UTXO_SET, Txoutput};
+use crate::{ error::BlockchainError, utils::{deserialize, serialize}};
 use crate::blocks::block::Block;
+use crate::transactions::Txoutput;
 
 pub const TIP_KEY: &str = "tip_hash";
 pub const HEIGHT: &str = "height";
@@ -93,7 +94,7 @@ impl Storage for SledDb {
         Ok(Box::new(iter))
     }
 
-    fn get_utxo_set(&self) -> HashMap<String, Vec<crate::Txoutput>> {
+    fn get_utxo_set(&self) -> HashMap<String, Vec<Txoutput>> {
         let mut map = HashMap::new();
 
         let prefix = format!("{}:", UTXO_SET);
@@ -110,7 +111,7 @@ impl Storage for SledDb {
         map
     }
 
-    fn write_utxo(&self, txid: &str, outs: Vec<crate::Txoutput>) -> Result<(), BlockchainError> {
+    fn write_utxo(&self, txid: &str, outs: Vec<Txoutput>) -> Result<(), BlockchainError> {
         let name = format!("{}:{}", UTXO_SET, txid);
         self.db.insert(name, serialize(&outs)?)?;
         Ok(())

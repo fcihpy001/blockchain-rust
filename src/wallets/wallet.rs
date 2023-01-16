@@ -1,4 +1,4 @@
-
+use serde::{Serialize, Deserialize};
 use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING, KeyPair};
 use crate::utils::secret::{base58_encode, new_private_key, ripemd160_digest, sha256_digest};
 

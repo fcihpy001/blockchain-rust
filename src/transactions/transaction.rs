@@ -1,22 +1,26 @@
+use serde::{Serialize, Deserialize};
 
-use serde::de::Unexpected::Str;
+use crate::{ utils::{serialize, hash_to_str, ecdsa_p256_sha256_sign_digest, ecdsa_p256_sha256_sign_verify}};
+use crate::blocks::blockchain::Blockchain;
 use crate::transactions::tx_input::Txinput;
 use crate::transactions::tx_output::Txoutput;
-use crate::transactions::uxto_set::UTXOSet;
-use crate::utils::{hash_to_str, serialize};
+use crate::transactions::utxo_set::UTXOSet;
+use crate::utils::Storage;
+use crate::wallets::wallet::hash_pub_key;
+use crate::wallets::wallets::Wallets;
 
-const SUBSIDY: i32 = 10;
+const SUBSIDY: i32= 10;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Transaction {
     id: String,
     vin: Vec<Txinput>,
-    vout: Vec<Txoutput>
+    vout: Vec<Txoutput>,
 }
 
 impl Transaction {
     pub fn new_coinbase(to: &str) -> Self {
-        let txin = Txinput::Default();
+        let txin = Txinput::default();
         let txout = Txoutput::new(SUBSIDY, to);
 
         let mut tx = Transaction {
@@ -25,16 +29,16 @@ impl Transaction {
             vout: vec![txout],
         };
         tx.set_hash();
+
         tx
     }
 
-    pub fn new_utxo(
-        from: &str,
-        to: &str,
-        amount: i32,
-        utxso_set: &UTXOSet<T>
-    ) -> Self {
-        let (accumulated, valid_outputs) = utxo_set.find_spendable_outputs(from, amount);
+    pub fn new_utxo<T: Storage>(from: &str, to: &str, amount: i32, utxo_set: &UTXOSet<T>, bc: &Blockchain<T>) -> Self {
+        let wallets = Wallets::new().unwrap();
+        let wallet = wallets.get_wallet(from).unwrap();
+        let public_key_hash = hash_pub_key(wallet.get_public_key());
+
+        let (accumulated, valid_outputs) = utxo_set.find_spendable_outputs(&public_key_hash, amount);
         if accumulated < amount {
             panic!("Error not enough funds");
         }
@@ -42,7 +46,7 @@ impl Transaction {
         let mut inputs = vec![];
         for (txid, outputs) in valid_outputs {
             for idx in outputs {
-                let input = Txinput::new(txid.clone(), idx.clone(), from);
+                let input = Txinput::new(txid.clone(), idx.clone(), wallet.get_public_key().to_vec());
                 inputs.push(input);
             }
         }
@@ -58,13 +62,88 @@ impl Transaction {
             vout: outputs,
         };
         tx.set_hash();
+        tx.sign(bc, wallet.get_pkcs8());
 
         tx
     }
 
-    pub fn set_hash(&mut self) {
+    fn set_hash(&mut self) {
         if let Ok(tx_ser) = serialize(self) {
             self.id = hash_to_str(&tx_ser)
+        }
+    }
+
+    fn sign<T: Storage>(&mut self, bc: &Blockchain<T>, pkcs8: &[u8]) {
+        let mut tx_copy = self.trimmed_copy();
+
+        for (idx, vin) in self.vin.iter_mut().enumerate() {
+            // 查找输入引用的交易
+            let prev_tx_option = bc.find_transaction(vin.get_txid());
+            if prev_tx_option.is_none() {
+                panic!("ERROR: Previous transaction is not correct")
+            }
+            let prev_tx = prev_tx_option.unwrap();
+            tx_copy.vin[idx].set_signature(vec![]);
+            tx_copy.vin[idx].set_pub_key(prev_tx.vout[vin.get_vout()].get_pub_key_hash());
+            tx_copy.set_hash();
+
+            tx_copy.vin[idx].set_pub_key(&vec![]);
+
+            // 使用私钥对数据签名
+            let signature = ecdsa_p256_sha256_sign_digest(pkcs8, tx_copy.id.as_bytes());
+            vin.set_signature(signature);
+        }
+    }
+
+    pub fn verify<T: Storage>(&self, bc: &Blockchain<T>) -> bool {
+        if self.is_coinbase() {
+            return true;
+        }
+        let mut tx_copy = self.trimmed_copy();
+        for (idx, vin) in self.vin.iter().enumerate() {
+            let prev_tx_option = bc.find_transaction(vin.get_txid());
+            if prev_tx_option.is_none() {
+                panic!("ERROR: Previous transaction is not correct")
+            }
+            let prev_tx = prev_tx_option.unwrap();
+            tx_copy.vin[idx].set_signature(vec![]);
+            tx_copy.vin[idx].set_pub_key(prev_tx.vout[vin.get_vout()].get_pub_key_hash());
+            tx_copy.set_hash();
+
+            tx_copy.vin[idx].set_pub_key(&vec![]);
+
+            // 使用公钥验证签名
+            let verify = ecdsa_p256_sha256_sign_verify(
+                vin.get_pub_key(),
+                vin.get_signature(),
+                tx_copy.id.as_bytes(),
+            );
+            if !verify {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// 判断是否是 coinbase 交易
+    pub fn is_coinbase(&self) -> bool {
+        self.vin.len() == 1 && self.vin[0].get_pub_key().len() == 0
+    }
+
+    fn trimmed_copy(&self) -> Transaction {
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+        for input in &self.vin {
+            let txinput = Txinput::new(input.get_txid(), input.get_vout(), vec![]);
+            inputs.push(txinput);
+        }
+        for output in &self.vout {
+            outputs.push(output.clone());
+        }
+        Transaction {
+            id: self.id.clone(),
+            vin: inputs,
+            vout: outputs,
         }
     }
 
@@ -80,3 +159,42 @@ impl Transaction {
         self.vin.as_slice()
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::env::current_dir;
+    use std::sync::Arc;
+    use crate::blocks::blockchain::Blockchain;
+    use crate::transactions::{Transaction, UTXOSet};
+    use crate::utils::SledDb;
+    use crate::wallets::wallets::Wallets;
+
+    #[test]
+    fn test_tx() {
+        tracing_subscriber::fmt().init();
+
+        let justin_addr = "1M684nX5dTNQYi2ELSCazjyz5dgegJ3mVD";
+
+        let mut wallets = Wallets::new().unwrap();
+        let bob_addr = wallets.create_wallet();
+        let bruce_addr = wallets.create_wallet();
+
+        let path = current_dir().unwrap().join("data");
+        let storage = Arc::new(SledDb::new(path));
+
+        let mut bc = Blockchain::new(storage.clone(), justin_addr);
+        let utxos = UTXOSet::new(storage);
+
+        let tx_1 = Transaction::new_utxo(justin_addr, &bob_addr, 4, &utxos, &bc);
+        let tx_2 = Transaction::new_utxo(justin_addr, &bruce_addr, 2, &utxos, &bc);
+
+        let txs = vec![tx_1, tx_2];
+
+        bc.mine_block(&txs);
+        utxos.reindex(&bc).unwrap();
+
+        bc.blocks_info();
+    }
+}
+

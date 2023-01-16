@@ -3,7 +3,8 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::blocks::block::Block;
 use tracing::info;
-use crate::transactions::Transaction;
+use crate::error::BlockchainError;
+use crate::transactions::{Transaction, Txoutput};
 use crate::utils::sleddb::SledDb;
 use crate::utils::Storage;
 
@@ -15,16 +16,16 @@ pub struct Blockchain<T = SledDb> {
     height: AtomicUsize
 }
 
-impl Blockchain {
-    pub fn new(storage: Arc<T>, genesis_addr: &str) -> Self {
-        if let Ok(tip) = storage.get_tip() {
+impl<T: Storage> Blockchain<T> {
+    pub fn new(storage: Arc<T>,genesis_addr: &str) -> Self {
+        if let Ok(Some(tip)) = storage.get_tip() {
             let height = storage.get_height().unwrap();
             Self {
                 storage,
                 tip: Arc::new(RwLock::new(tip)),
                 height: AtomicUsize::new(height.unwrap()),
             }
-        } else {
+        }else {
             let genesis_block = Block::create_genesis_block(CURR_BITS, genesis_addr);
             let hash = genesis_block.get_hash();
             storage.update_blocks(&hash, &genesis_block, 0 as usize);
@@ -37,14 +38,43 @@ impl Blockchain {
         }
     }
 
-    pub fn mine_block(&mut self, txs: &[Transaction]) {
+    pub fn create_genesis_block(&mut self, genesis_addr: &str) {
+        let genesis_block = Block::create_genesis_block(CURR_BITS, genesis_addr);
+        let hash = genesis_block.get_hash();
+        self.height.fetch_add(1, Ordering::Relaxed);
+        self.storage.update_blocks(&hash, &genesis_block, self.height.load(Ordering::Relaxed));
+        let mut tip = self.tip.write().unwrap();
+        *tip = hash;
+    }
+
+    pub fn mine_block(&mut self, txs: &[Transaction]) -> Block {
+        for tx in txs {
+            if tx.verify(self) == false {
+                panic!("ERROR: Invalid transaction")
+            }
+        }
+
         let block = Block::new(txs, &self.tip.read().unwrap(), CURR_BITS);
         let hash = block.get_hash();
         self.height.fetch_add(1, Ordering::Relaxed);
         self.storage.update_blocks(&hash, &block, self.height.load(Ordering::Relaxed));
-
         let mut tip = self.tip.write().unwrap();
         *tip = hash;
+
+        block
+    }
+
+    pub fn add_block(&mut self, block: Block) -> Result<(), BlockchainError> {
+        let hash = block.get_hash();
+        if let Some(_) = self.storage.get_block(&hash)? {
+            info!("Block {} already exists", hash);
+        }else {
+            self.height.fetch_add(1, Ordering::Relaxed);
+            self.storage.update_blocks(&hash, &block, self.height.load(Ordering::Relaxed));
+            let mut tip = self.tip.write().unwrap();
+            *tip = hash;
+        }
+        Ok(())
     }
 
     pub fn find_utxo(&self) -> HashMap<String, Vec<Txoutput>> {
@@ -83,9 +113,44 @@ impl Blockchain {
         utxo
     }
 
+    pub fn find_transaction(&self, txid: String) -> Option<Transaction> {
+        let blocks = self.storage.get_block_iter().unwrap();
+        for block in blocks {
+            for tx in block.get_tranxs() {
+                if tx.get_id() == txid {
+                    return Some(tx);
+                }
+            }
+        }
+        None
+    }
+
     pub fn blocks_info(&self) {
-        for block in self.blocks.iter() {
+        let blocks = self.storage.get_block_iter().unwrap();
+        for block in blocks {
             info!("{:#?}", block);
         }
+    }
+
+    pub fn get_blocks(&self) -> Vec<Block> {
+        self.storage.get_block_iter().unwrap().collect()
+    }
+
+    pub fn get_tip(&self) -> String {
+        self.tip.read().unwrap().to_string()
+    }
+
+    pub fn get_height(&self) -> usize {
+        self.height.load(Ordering::Relaxed)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_chain() {
+
     }
 }

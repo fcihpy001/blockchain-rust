@@ -28,7 +28,7 @@ impl BlockHeader {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq,Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Block {
     header: BlockHeader,
     tranxs: Vec<Transaction>,
@@ -77,7 +77,7 @@ impl Block {
         }
     }
 
-    pub fn get_tranxs(&self) -> &[Transaction] {
-        &self.tranxs
+    pub fn get_tranxs(&self) -> Vec<Transaction> {
+        self.tranxs.clone()
     }
 }
