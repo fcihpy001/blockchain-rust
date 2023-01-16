@@ -19,14 +19,30 @@ impl<T: Storage> UTXOSet<T> {
         self.storage.clear_utxo_set();
         let map = bc.find_utxo();
         for (txid, outs) in map {
-
+            self.storage.write_utxo(&txid, outs)?;
         }
+        Ok(())
     }
 
     pub fn find_sendable_outputs(
         &self,
         from_addr: &str,
-        amount: i32) -> (i32, HashMap<String,Vec<i32> >) {
+        amount: i32) -> (i32, HashMap<String,Vec<usize> >) {
+        let mut unspent_outputs = HashMap::new();
+        let mut accumulated = 0;
+        let utxo_set = self.storage.get_utxo_set();
 
+        for (txid, outs) in utxo_set.iter() {
+            for (idx, out) in outs.iter().enumerate() {
+                if out.is_locked(public_key_hash) && accumulated < amount {
+                    accumulated += out.get_value();
+                    unspent_outputs.entry(txid.to_string())
+                        .and_modify(|v: &mut Vec<usize>| v.push(idx))
+                        .or_insert(vec![idx]);
+                }
+            }
+        }
+
+        (accumulated, unspent_outputs)
     }
 }

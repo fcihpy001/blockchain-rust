@@ -7,6 +7,7 @@ use crate::utils::{hash_to_str, serialize};
 
 const SUBSIDY: i32 = 10;
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Transaction {
     id: String,
     vin: Vec<Txinput>,
