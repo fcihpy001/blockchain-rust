@@ -1,5 +1,8 @@
+use std::ptr::hash;
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
+
+use crate::blocks::pow::ProofOfWork;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Block {
@@ -8,37 +11,55 @@ pub struct Block {
     hash: String
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct BlockHeader {
     timestamp: i64,
     prev_hash: String,
+    bits: usize,
     nonce: usize
 }
 
+impl BlockHeader {
+    pub fn new(prev_hash: &str, bits: usize) -> Self {
+        Self {
+            timestamp: Utc::now().timestamp(),
+            prev_hash: prev_hash.into(),
+            bits,
+            nonce: 0
+        }
+    }
+}
+
 impl Block {
-    pub fn new(data: &str, prev_hash: &str) -> Self {
+    pub fn new(data: &str, prev_hash: &str, bits: usize) -> Self {
         let mut block = Block {
-            header: BlockHeader {
-                timestamp: Utc::now().timestamp(),
-                prev_hash: prev_hash.into(),
-                nonce: 0
-            },
+            header: BlockHeader::new(prev_hash, bits),
             data: data.into(),
             hash: String::new()
         };
-        block.set_hash();
+        let pow = ProofOfWork::new(bits);
+        pow.run(&mut block);
         block
     }
 
-    pub fn create_genesis_block() -> Self {
-        Self::new("创世区块", "")
+    pub fn create_genesis_block(bits: usize) -> Self {
+
+        Self::new("创世区块", "", bits)
     }
 
     pub fn get_hash(&self) -> String {
         self.hash.clone()
     }
 
-    fn set_hash(&mut self) {
+    pub(crate) fn set_hash(&mut self, hash: String) {
+        self.hash = hash
+    }
 
+    pub fn get_header(&self) -> BlockHeader {
+        self.header.clone()
+    }
+
+    pub fn set_nonce(&mut self, nonce: usize) {
+        self.header.nonce = nonce
     }
 }
