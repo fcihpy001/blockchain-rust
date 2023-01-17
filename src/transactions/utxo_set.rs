@@ -15,7 +15,7 @@ impl<T: Storage> UTXOSet<T> {
         }
     }
 
-    pub fn reindex(&self, bc: &Blockchain) -> Result<(), BlockchainError> {
+    pub fn reindex(&self, bc: &Blockchain<T>) -> Result<(), BlockchainError> {
         self.storage.clear_utxo_set();
         let map = bc.find_utxo();
         for (txid, outs) in map {

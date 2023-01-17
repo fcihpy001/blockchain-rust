@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
-use crate::wallets::wallet::hash_pub_key;
+use crate::utils::hash_pub_key;
+
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Txinput {

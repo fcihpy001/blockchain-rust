@@ -5,6 +5,7 @@ use crypto::ripemd160::Ripemd160;
 use ring::rand::SystemRandom;
 use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P256_SHA256_FIXED};
 use ring::digest::{Context, SHA256};
+use crate::wallets::wallet::ADDRESS_CHECKSUM_LEN;
 
 
 pub fn new_private_key() -> Vec<u8> {
@@ -46,4 +47,16 @@ pub fn ecdsa_p256_sha256_sign_verify(public_key: &[u8], signature: &[u8], messag
         ring::signature::UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_key);
     let result = peer_public_key.verify(message, signature.as_ref());
     result.is_ok()
+}
+
+pub fn hash_pub_key(pub_key: &[u8]) -> Vec<u8> {
+    let pub_key_sha256 = sha256_digest(pub_key);
+    let pub_key_ripemd160 = ripemd160_digest(&pub_key_sha256);
+    pub_key_ripemd160
+}
+
+pub fn checksum(payload: &[u8]) -> Vec<u8> {
+    let first_sha = sha256_digest(payload);
+    let second_sha = sha256_digest(&first_sha);
+    second_sha[0..ADDRESS_CHECKSUM_LEN].to_vec()
 }

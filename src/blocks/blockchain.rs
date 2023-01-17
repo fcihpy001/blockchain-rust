@@ -17,7 +17,7 @@ pub struct Blockchain<T = SledDb> {
 }
 
 impl<T: Storage> Blockchain<T> {
-    pub fn new(storage: Arc<T>,genesis_addr: &str) -> Self {
+    pub fn new(storage: Arc<T>) -> Self {
         if let Ok(Some(tip)) = storage.get_tip() {
             let height = storage.get_height().unwrap();
             Self {
@@ -26,13 +26,9 @@ impl<T: Storage> Blockchain<T> {
                 height: AtomicUsize::new(height.unwrap()),
             }
         }else {
-            let genesis_block = Block::create_genesis_block(CURR_BITS, genesis_addr);
-            let hash = genesis_block.get_hash();
-            storage.update_blocks(&hash, &genesis_block, 0 as usize);
-
             Self {
                 storage,
-                tip: Arc::new(RwLock::new(hash)),
+                tip: Arc::new(RwLock::new(String::new())),
                 height: AtomicUsize::new(0),
             }
         }

@@ -5,8 +5,8 @@ use crate::blocks::blockchain::Blockchain;
 use crate::transactions::tx_input::Txinput;
 use crate::transactions::tx_output::Txoutput;
 use crate::transactions::utxo_set::UTXOSet;
-use crate::utils::Storage;
-use crate::wallets::wallet::hash_pub_key;
+use crate::utils::{hash_pub_key, Storage};
+
 use crate::wallets::wallets::Wallets;
 
 const SUBSIDY: i32= 10;

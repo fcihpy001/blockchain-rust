@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING, KeyPair};
+use crate::utils::{checksum, hash_pub_key};
 use crate::utils::secret::{base58_encode, new_private_key, ripemd160_digest, sha256_digest};
 
 const VERSION: u8 = 0x00;
@@ -40,16 +41,4 @@ impl Wallet {
     pub fn get_public_key(&self) -> &[u8] {
         self.public_key.as_slice()
     }
-}
-
-pub fn hash_pub_key(pub_key: &[u8]) -> Vec<u8> {
-    let pub_key_sha256 = sha256_digest(pub_key);
-    let pub_key_ripemd160 = ripemd160_digest(&pub_key_sha256);
-    pub_key_ripemd160
-}
-
-pub fn checksum(payload: &[u8]) -> Vec<u8> {
-    let first_sha = sha256_digest(payload);
-    let second_sha = sha256_digest(&first_sha);
-    second_sha[0..ADDRESS_CHECKSUM_LEN].to_vec()
 }
