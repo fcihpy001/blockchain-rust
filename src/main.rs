@@ -15,7 +15,6 @@ pub mod networks;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Hello, world!");
 
     let mut path = String::from("data");
     if let Some(args) = env::args().nth(2) {
